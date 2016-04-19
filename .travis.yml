@@ -1,0 +1,88 @@
+sudo: true
+language: scala
+jdk:
+  - oraclejdk8
+scala:
+  - 2.11.6
+services:
+  - docker
+
+#branches:
+#  except:
+#    - feature/SALT
+
+env:
+  global:
+    - DOCKER_IMAGE="henrymisfit/test"
+    - DOCKER_TAG="${TRAVIS_BRANCH//\//_}.${TRAVIS_BUILD_NUMBER}"
+    - VERSION="1.1.0"
+
+before_install:
+  # include functions
+  - curl -o /tmp/ci_functions https://raw.githubusercontent.com/westmisfit/ci_functions/master/functions.sh; source /tmp/ci_functions
+  # set docker account
+  - echo '{"https://index.docker.io/v1/":{"auth":"'$DOCKER_AUTH'","email":"'$DOCKER_EMAIL'"}}' > ~/.dockercfg
+  # load latest docker image from cache
+  - loadDockerImages "$HOME/vendor/docker_images"
+  # check if deploy production
+  - ALLOW_DEPLOY=$(checkCommitLogTag 'deploy')
+  - curl -o /tmp/newrelic.zip https://download.newrelic.com/newrelic/java-agent/newrelic-agent/current/newrelic-java.zip ; unzip /tmp/newrelic.zip
+  - curl -o /tmp/pup_linux_amd64.zip https://github.com/ericchiang/pup/releases/download/v0.3.9/pup_linux_amd64.zip; unzip pup_linux_amd64.zip
+
+install:
+  # pull base image
+  - docker pull misfit/cloud_scala:latest
+#  - docker pull mongo:3.2 && docker run -d --net=host mongo:3.2
+
+#before_script:
+#  - sleep 15; docker run --net=host mongo:3.2 mongo --eval "printjson(db.serverStatus())"
+
+script:
+  #sbt test clean coverage test
+  #sbt coverageReport
+  #echo "<div>" > summary.html
+  #cat ./target/scala-2.11/scoverage-report/overview.html | ./pub "div.alert.alert-info" >> summary.html
+  #cat ./target/scala-2.11/scoverage-report/overview.html | ./pub "div.stats" >> summary.html
+  #echo "</div>" >> summary.html
+  #sed -i -e 's/class="alert alert-info"/style="background-color: #d9edf7; border: 1px solid #bce8f1; color: #31708f;border-radius: 4px; margin-bottom: 20px; padding: 15px;"/g' summary.html
+  #sed -i -e 's/table class="table"/table style="border-collapse: collapse; border-spacing: 0;background-color: transparent; max-width: 100%;margin-bottom: 20px;width: 100%;"/g' summary.html
+
+  # zip report to file
+  #cd ./target/scala-2.11/
+  #tar cfv fossil-device-scoverage-report.tar scoverage-report
+  #cd ../../
+
+  #send report to mail sw-q-cloud@misfit.com
+  TODAY=`date`
+  # mail -s "[Unit Test Report] Fossil Device - $TODAY" hy@misfit.com < summary.html
+
+  # clean up report
+  #rm summary.html
+  #rm pup
+  #sbt test clean
+
+
+  # sbt test
+  # - sbt ++$TRAVIS_SCALA_VERSION test
+  # dist and build docker image
+  - >
+    sbt ++$TRAVIS_SCALA_VERSION dist &&
+    unzip target/universal/TestTravis-$VERSION.zip -d target/universal/ &&
+    mv target/universal/TestTravis-$VERSION target/universal/TestTravis &&
+    docker build -t $DOCKER_IMAGE:$DOCKER_TAG .
+  # run container
+#  - docker run --name fossil_device -e "ENV=ci" -d --net=host $DOCKER_IMAGE:$DOCKER_TAG
+  # test ping
+#  - checkHealth "http://localhost:9000/ping"
+
+before_deploy:
+  # push docker image
+  - docker push $DOCKER_IMAGE:$DOCKER_TAG
+
+
+cache:
+  directories:
+    - $HOME/vendor/docker_images
+    - $HOME/.ivy2/cache
+    - $HOME/.sbt/
+
